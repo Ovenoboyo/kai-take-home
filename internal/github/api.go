@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 	"vuln-scan-api/internal/database"
-	httpclient "vuln-scan-api/internal/http_client"
+	"vuln-scan-api/internal/httpclient"
 )
 
 type RawFileContent []struct {
