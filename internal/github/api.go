@@ -37,10 +37,20 @@ type RawFileContent []struct {
 
 func GetFileContent(root string, file string) (*RawFileContent, error) {
 	client := httpclient.NewClient[RawFileContent]()
-	resp, err := client.Get(fmt.Sprintf("https://raw.githubusercontent.com/%s/main/%s", root, file))
-	if err != nil {
-		return nil, err
+
+	retry := 0
+	for {
+		resp, err := client.Get(fmt.Sprintf("https://raw.githubusercontent.com/%s/main/%s", root, file))
+		if err != nil {
+			fmt.Println(err, "retrying request...")
+			retry += 1
+			if retry <= 2 {
+				continue
+			} else {
+				return nil, err
+			}
+		}
+		return resp, nil
 	}
 
-	return resp, nil
 }
