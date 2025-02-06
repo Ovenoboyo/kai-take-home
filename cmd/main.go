@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"vuln-scan-api/internal/commands"
+	"vuln-scan-api/internal/database"
 
 	"github.com/valyala/fasthttp"
 )
@@ -12,6 +13,8 @@ func RequestHandler(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(404)
 		return
 	}
+
+	ctx.Response.Header.Set("Content-Type", "application/json")
 
 	switch string(ctx.Request.URI().Path()) {
 	case "/scan":
@@ -36,6 +39,8 @@ func RequestHandler(ctx *fasthttp.RequestCtx) {
 }
 
 func main() {
+	database.Initialize()
+
 	handler := RequestHandler
 	if err := fasthttp.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("Error in ListenAndServe: %v", err)

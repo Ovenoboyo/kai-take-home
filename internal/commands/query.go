@@ -23,6 +23,8 @@ func NewQueryArgs(data []byte) (*QueryArgs, error) {
 
 func (q *QueryArgs) GetVulnsBySeverity() (ret []byte, err error) {
 	conn := database.NewConn()
+	defer conn.Close()
+
 	vulns, err := conn.GetVulnBySeverity(q.Filters)
 	if err != nil {
 		fmt.Println(err)
@@ -34,6 +36,5 @@ func (q *QueryArgs) GetVulnsBySeverity() (ret []byte, err error) {
 		return ret, err
 	}
 
-	fmt.Println(bytes)
 	return bytes, nil
 }

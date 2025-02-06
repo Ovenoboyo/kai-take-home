@@ -13,23 +13,16 @@ type SqliteConn struct {
 	db *sql.DB
 }
 
-func NewConn() *SqliteConn {
-	db, err := sql.Open("sqlite3", "./data.db")
-	if err != nil {
-		panic(err)
-	}
+func Initialize() {
+	conn := NewConn()
+	defer conn.Close()
 
-	_, err = db.Exec(`
+	_, err := conn.db.Exec(`
 		pragma journal_mode = WAL;
 		pragma synchronous = normal;
 		pragma temp_store = memory;
 		pragma mmap_size = 30000000000;
-		`)
-	if err != nil {
-		panic(err)
-	}
 
-	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS vulnerabilities (
 		    id TEXT PRIMARY KEY,
 		    severity TEXT NOT NULL,
@@ -44,7 +37,19 @@ func NewConn() *SqliteConn {
 		    risk_factors TEXT,
 		    source_file TEXT NOT NULL,
 		    scan_time DATETIME NOT NULL
-		);`)
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_severity ON vulnerabilities (severity);
+		`)
+
+	if err != nil {
+		panic(err)
+	}
+
+}
+
+func NewConn() *SqliteConn {
+	db, err := sql.Open("sqlite3", "./data.db")
 	if err != nil {
 		panic(err)
 	}
@@ -62,20 +67,7 @@ var insertQuery string = `
 INSERT INTO vulnerabilities (
 	id, severity, cvss, status, package_name, current_version, fixed_version,
 	description, published_date, link, risk_factors, source_file, scan_time
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-	severity=excluded.severity,
-	cvss=excluded.cvss,
-	status=excluded.status,
-	package_name=excluded.package_name,
-	current_version=excluded.current_version,
-	fixed_version=excluded.fixed_version,
-	description=excluded.description,
-	published_date=excluded.published_date,
-	link=excluded.link,
-	risk_factors=excluded.risk_factors,
-	source_file=excluded.source_file,
-	scan_time=excluded.scan_time;
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 `
 
 func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, sourceFile string, scanTime time.Time) error {
@@ -135,4 +127,8 @@ func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, erro
 	}
 
 	return ret, nil
+}
+
+func (s *SqliteConn) Close() {
+	s.db.Close()
 }

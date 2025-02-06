@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"vuln-scan-api/internal/database"
 	"vuln-scan-api/internal/github"
 )
 
@@ -33,12 +34,39 @@ func (s *ScanArgs) SanitizeRepo() error {
 	return nil
 }
 
+func addVulnToDB(resp *github.RawFileContent, file string) {
+	conn := database.NewConn()
+	tx, err := conn.GetTx()
+	if err != nil {
+		fmt.Println("Error starting transaction", err)
+		return
+	}
+	for _, res := range *resp {
+		err := conn.AddVulnsToDb(tx, res.ScanResults.Vulnerabilities, file, res.ScanResults.Timestamp)
+		if err != nil {
+			fmt.Println("Error starting transaction", err)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		fmt.Println("Error committing transaction", err)
+	}
+}
+
 func (s *ScanArgs) RunScan() error {
-	fmt.Println(s)
 	if err := s.SanitizeRepo(); err != nil {
 		return err
 	}
 
-	github.GetAllFiles(s.Repo, s.Files)
+	for _, file := range s.Files {
+		go func() {
+			resp, err := github.GetFileContent(s.Repo, file)
+			if err != nil {
+				fmt.Println(err)
+			}
+			addVulnToDB(resp, file)
+		}()
+	}
 	return nil
 }
