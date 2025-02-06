@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -77,7 +78,7 @@ ON CONFLICT(id) DO UPDATE SET
 	scan_time=excluded.scan_time;
 `
 
-func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, source_file string, scan_time time.Time) error {
+func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, sourceFile string, scanTime time.Time) error {
 	for _, v := range vuln {
 		riskFactorsJSON, err := json.Marshal(v.RiskFactors)
 		if err != nil {
@@ -85,7 +86,7 @@ func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, source_fil
 		}
 
 		_, err = tx.Exec(insertQuery, v.ID, v.Severity, v.Cvss, v.Status, v.PackageName,
-			v.CurrentVersion, v.FixedVersion, v.Description, v.PublishedDate.Format(time.RFC3339), v.Link, string(riskFactorsJSON), source_file, scan_time)
+			v.CurrentVersion, v.FixedVersion, v.Description, v.PublishedDate.Format(time.RFC3339), v.Link, string(riskFactorsJSON), sourceFile, scanTime)
 
 		if err != nil {
 			tx.Rollback()
@@ -94,4 +95,44 @@ func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, source_fil
 	}
 
 	return nil
+}
+
+var severityFilterQuery string = `SELECT id, severity, cvss, status, package_name, current_version, fixed_version,
+			  description, published_date, link, risk_factors
+			  FROM vulnerabilities WHERE 1=1 `
+
+func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, error) {
+	ret := []Vulnerabilities{}
+
+	var bind []any = make([]any, 0, 0)
+
+	query := severityFilterQuery
+	if filters.Severity != nil {
+		query += "AND severity = ?"
+		bind = append(bind, *filters.Severity)
+	}
+
+	rows, err := s.db.Query(query, bind...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var vuln Vulnerabilities
+		var riskFactors []byte
+		if err := rows.Scan(&vuln.ID, &vuln.Severity, &vuln.Cvss, &vuln.Status, &vuln.PackageName,
+			&vuln.CurrentVersion, &vuln.FixedVersion, &vuln.Description, &vuln.PublishedDate,
+			&vuln.Link, &riskFactors); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(riskFactors, &vuln.RiskFactors); err != nil {
+			fmt.Println(err)
+		}
+
+		ret = append(ret, vuln)
+	}
+
+	return ret, nil
 }

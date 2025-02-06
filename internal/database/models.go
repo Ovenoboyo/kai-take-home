@@ -15,3 +15,7 @@ type Vulnerabilities struct {
 	Link           string    `json:"link"`
 	RiskFactors    []string  `json:"risk_factors"`
 }
+
+type Filters struct {
+	Severity *string `json:"severity"`
+}
