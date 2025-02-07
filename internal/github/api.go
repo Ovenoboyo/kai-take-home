@@ -52,5 +52,4 @@ func GetFileContent(root string, file string) (*RawFileContent, error) {
 		}
 		return resp, nil
 	}
-
 }

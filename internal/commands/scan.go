@@ -5,8 +5,14 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"vuln-scan-api/internal/database"
 	"vuln-scan-api/internal/github"
+)
+
+var (
+	isScanRunning   bool         = false
+	scanRunningLock sync.RWMutex = sync.RWMutex{}
 )
 
 type ScanArgs struct {
@@ -34,39 +40,80 @@ func (s *ScanArgs) SanitizeRepo() error {
 	return nil
 }
 
-func addVulnToDB(resp *github.RawFileContent, file string) {
+func addVulnToDB(resp *github.RawFileContent, file string) error {
 	conn := database.NewConn()
 	tx, err := conn.GetTx()
 	if err != nil {
-		fmt.Println("Error starting transaction", err)
-		return
+		return err
 	}
 	for _, res := range *resp {
 		err := conn.AddVulnsToDb(tx, res.ScanResults.Vulnerabilities, file, res.ScanResults.Timestamp)
 		if err != nil {
-			fmt.Println("Error starting transaction", err)
-			return
+			return err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		fmt.Println("Error committing transaction", err)
-	}
-}
-
-func (s *ScanArgs) RunScan() error {
-	if err := s.SanitizeRepo(); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (s *ScanArgs) isScanRunning() bool {
+	scanRunningLock.RLock()
+	defer scanRunningLock.RUnlock()
+
+	return isScanRunning
+}
+
+func (s *ScanArgs) RunScan() (bool, error) {
+	if s.isScanRunning() {
+		return false, nil
+	}
+
+	scanRunningLock.Lock()
+	defer scanRunningLock.Unlock()
+
+	isScanRunning = true
+
+	if err := s.SanitizeRepo(); err != nil {
+		return false, err
+	}
+
+	var wg sync.WaitGroup
 	for _, file := range s.Files {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			resp, err := github.GetFileContent(s.Repo, file)
 			if err != nil {
 				fmt.Println(err)
 			}
-			addVulnToDB(resp, file)
+			if err = addVulnToDB(resp, file); err != nil {
+				fmt.Println(err)
+			}
 		}()
 	}
-	return nil
+
+	go func() {
+		wg.Wait()
+		scanRunningLock.Lock()
+		defer scanRunningLock.Unlock()
+
+		isScanRunning = false
+	}()
+	return true, nil
+}
+
+func WaitForScan() {
+	for {
+		scanRunningLock.RLock()
+		if !isScanRunning {
+			scanRunningLock.RUnlock()
+			break
+		}
+		scanRunningLock.RUnlock()
+	}
 }

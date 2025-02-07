@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"vuln-scan-api/internal/commands"
 	"vuln-scan-api/internal/database"
@@ -16,12 +17,15 @@ func RequestHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	ctx.Response.Header.Set("Content-Type", "application/json")
+	ctx.Response.SetStatusCode(200)
 
 	switch string(ctx.Request.URI().Path()) {
 	case "/scan":
 		if scanner, err := commands.NewScanArgs(ctx.Request.Body()); err == nil {
-			if err := scanner.RunScan(); err != nil {
+			if success, err := scanner.RunScan(); err != nil {
 				ctx.Response.SetStatusCode(500)
+			} else if !success {
+				ctx.Response.SetBodyString("Scan already running")
 			}
 		} else {
 			ctx.Response.SetStatusCode(400)
@@ -36,17 +40,32 @@ func RequestHandler(ctx *fasthttp.RequestCtx) {
 		} else {
 			ctx.Response.SetStatusCode(400)
 		}
+	default:
+		ctx.Response.SetStatusCode(404)
 	}
+}
+
+func StartServer() *fasthttp.Server {
+	server := &fasthttp.Server{
+		Handler: RequestHandler,
+	}
+
+	go func() {
+		preforkServer := prefork.New(server)
+		if err := preforkServer.ListenAndServe(":8080"); err != nil {
+			log.Fatalf("Error in ListenAndServe: %v", err)
+		}
+
+		fmt.Println("Exitting")
+	}()
+
+	return server
 }
 
 func main() {
 	database.Initialize()
 
-	server := &fasthttp.Server{
-		Handler: RequestHandler,
-	}
-	preforkServer := prefork.New(server)
-	if err := preforkServer.ListenAndServe(":8080"); err != nil {
-		log.Fatalf("Error in ListenAndServe: %v", err)
-	}
+	StartServer()
+
+	select {}
 }

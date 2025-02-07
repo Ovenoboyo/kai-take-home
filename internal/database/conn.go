@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -131,4 +132,12 @@ func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, erro
 
 func (s *SqliteConn) Close() {
 	s.db.Close()
+}
+
+func DeleteDb() {
+	files := []string{"data.db", "data.db-shm", "data.db-wal"}
+
+	for _, file := range files {
+		os.Remove(file)
+	}
 }
