@@ -6,6 +6,7 @@ import (
 	"vuln-scan-api/internal/database"
 
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/prefork"
 )
 
 func RequestHandler(ctx *fasthttp.RequestCtx) {
@@ -41,8 +42,11 @@ func RequestHandler(ctx *fasthttp.RequestCtx) {
 func main() {
 	database.Initialize()
 
-	handler := RequestHandler
-	if err := fasthttp.ListenAndServe(":8080", handler); err != nil {
+	server := &fasthttp.Server{
+		Handler: RequestHandler,
+	}
+	preforkServer := prefork.New(server)
+	if err := preforkServer.ListenAndServe(":8080"); err != nil {
 		log.Fatalf("Error in ListenAndServe: %v", err)
 	}
 }
