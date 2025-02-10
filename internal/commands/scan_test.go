@@ -23,9 +23,9 @@ func TestScan(t *testing.T) {
 		t.Fatalf("Expected err nil, got %v", err)
 	}
 
-	success, err := query.RunScan()
+	_, err = query.RunScan()
 
-	if err != nil && success != true {
+	if err != nil {
 		t.Fatalf("Expected err nil, got %v", err)
 	}
 

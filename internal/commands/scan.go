@@ -8,18 +8,26 @@ import (
 	"sync"
 	"vuln-scan-api/internal/database"
 	"vuln-scan-api/internal/github"
+	"vuln-scan-api/internal/logger"
 )
 
 var (
-	isScanRunning   bool         = false
+	// True if a scan is already running. False otherwise
+	isScanRunning bool = false
+
+	// Lock when isScanRunning is to be accessed
 	scanRunningLock sync.RWMutex = sync.RWMutex{}
 )
 
+// QueryArgs parses the POST body from /scan
 type ScanArgs struct {
 	Repo  string   `json:"repo"`
 	Files []string `json:"files"`
 }
 
+// NewScanArgs creates a new ScanArgs instance from JSON data
+// data: JSON byte array containing the query arguments
+// returns: a pointer to ScanArgs and an error if parsing fails
 func NewScanArgs(data []byte) (*ScanArgs, error) {
 	var args ScanArgs
 	err := json.Unmarshal(data, &args)
@@ -30,6 +38,8 @@ func NewScanArgs(data []byte) (*ScanArgs, error) {
 	return &args, nil
 }
 
+// SanitizeRepo sanitizes the repository URL in ScanArgs.
+// Returns an error if URL parsing fails.
 func (s *ScanArgs) SanitizeRepo() error {
 	parsedURL, err := url.Parse(s.Repo)
 	if err != nil {
@@ -40,6 +50,10 @@ func (s *ScanArgs) SanitizeRepo() error {
 	return nil
 }
 
+// addVulnToDB adds vulnerabilities to the database.
+// resp: the raw file content from GitHub.
+// file: the file name.
+// Returns an error if database operations fail.
 func addVulnToDB(resp *github.RawFileContent, file string) error {
 	conn := database.NewConn()
 	tx, err := conn.GetTx()
@@ -60,6 +74,8 @@ func addVulnToDB(resp *github.RawFileContent, file string) error {
 	return nil
 }
 
+// isScanRunning checks if a scan is currently running.
+// Returns true if a scan is running, false otherwise.
 func (s *ScanArgs) isScanRunning() bool {
 	scanRunningLock.RLock()
 	defer scanRunningLock.RUnlock()
@@ -67,7 +83,9 @@ func (s *ScanArgs) isScanRunning() bool {
 	return isScanRunning
 }
 
-func (s *ScanArgs) RunScan() (bool, error) {
+// startScanIfNotRunning runs the vulnerability scan and updates the database.
+// Returns a boolean indicating if the scan started and an error if any.
+func (s *ScanArgs) startScanIfNotRunning() (bool, error) {
 	if s.isScanRunning() {
 		return false, nil
 	}
@@ -84,17 +102,17 @@ func (s *ScanArgs) RunScan() (bool, error) {
 	var wg sync.WaitGroup
 	for _, file := range s.Files {
 		wg.Add(1)
-		go func() {
+		go func(file string) {
 			defer wg.Done()
 
 			resp, err := github.GetFileContent(s.Repo, file)
 			if err != nil {
-				fmt.Println(err)
+				logger.Logger.Error("Failed to get data from github", "err", err)
 			}
 			if err = addVulnToDB(resp, file); err != nil {
-				fmt.Println(err)
+				logger.Logger.Warn("Failed to add vulns to DB", "err", err)
 			}
-		}()
+		}(file)
 	}
 
 	go func() {
@@ -107,6 +125,23 @@ func (s *ScanArgs) RunScan() (bool, error) {
 	return true, nil
 }
 
+// RunScan runs the scan in background and returns a sanitized response / error message
+// The response should be sanitized to avoid leaking internal errors
+func (s *ScanArgs) RunScan() ([]byte, error) {
+	success, err := s.startScanIfNotRunning()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to start scan")
+	}
+
+	if !success {
+		return nil, fmt.Errorf("Scan is already running")
+	}
+
+	return []byte("success"), nil
+}
+
+// WaitForScan waits for the current scan to complete.
+// Only used in tests
 func WaitForScan() {
 	for {
 		scanRunningLock.RLock()

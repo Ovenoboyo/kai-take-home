@@ -17,6 +17,8 @@ var (
 	maxIdleConnDuration time.Duration = time.Second * 5
 )
 
+// NewClient creates a new HTTP client with specified timeouts
+// returns: a new instance of Client
 func NewClient[T any]() Client[T] {
 	client := &fasthttp.Client{
 		ReadTimeout:                   readTimeout,
@@ -30,6 +32,9 @@ func NewClient[T any]() Client[T] {
 	}
 }
 
+// Get sends a GET request to the specified URL and decodes the response
+// url: the URL to send the GET request to
+// returns: a pointer to the decoded response and an error if the request fails
 func (c *Client[T]) Get(url string) (*T, error) {
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(url)

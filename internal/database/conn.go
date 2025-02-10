@@ -3,9 +3,9 @@ package database
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
+	"vuln-scan-api/internal/logger"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -14,6 +14,7 @@ type SqliteConn struct {
 	db *sql.DB
 }
 
+// Initialize sets up the database connection and creates necessary tables.
 func Initialize() {
 	conn := NewConn()
 	defer conn.Close()
@@ -49,6 +50,8 @@ func Initialize() {
 
 }
 
+// NewConn creates a new database connection.
+// returns: a pointer to SqliteConn
 func NewConn() *SqliteConn {
 	db, err := sql.Open("sqlite3", "./data.db")
 	if err != nil {
@@ -60,6 +63,8 @@ func NewConn() *SqliteConn {
 	}
 }
 
+// GetTx starts a new database transaction.
+// returns: a pointer to sql.Tx and an error if starting the transaction fails
 func (s *SqliteConn) GetTx() (*sql.Tx, error) {
 	return s.db.Begin()
 }
@@ -71,6 +76,12 @@ INSERT INTO vulnerabilities (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 `
 
+// AddVulnsToDb adds vulnerabilities to the database.
+// tx: the database transaction
+// vuln: slice of Vulnerabilities to add
+// sourceFile: the source file name
+// scanTime: the time of the scan
+// returns: an error if adding vulnerabilities to DB fails
 func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, sourceFile string, scanTime time.Time) error {
 	for _, v := range vuln {
 		riskFactorsJSON, err := json.Marshal(v.RiskFactors)
@@ -91,9 +102,12 @@ func (s *SqliteConn) AddVulnsToDb(tx *sql.Tx, vuln []Vulnerabilities, sourceFile
 }
 
 var severityFilterQuery string = `SELECT id, severity, cvss, status, package_name, current_version, fixed_version,
-			  description, published_date, link, risk_factors
-			  FROM vulnerabilities WHERE 1=1 `
+					description, published_date, link, risk_factors
+					FROM vulnerabilities WHERE 1=1 `
 
+// GetVulnBySeverity retrieves vulnerabilities filtered by severity.
+// filters: the filters to apply to the query
+// returns: a slice of Vulnerabilities and an error if the query fails
 func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, error) {
 	ret := []Vulnerabilities{}
 
@@ -121,7 +135,7 @@ func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, erro
 		}
 
 		if err := json.Unmarshal(riskFactors, &vuln.RiskFactors); err != nil {
-			fmt.Println(err)
+			logger.Logger.Error("Failed to parse risk factors arr, ignoring...", "err", err)
 		}
 
 		ret = append(ret, vuln)
@@ -130,10 +144,13 @@ func (s *SqliteConn) GetVulnBySeverity(filters Filters) ([]Vulnerabilities, erro
 	return ret, nil
 }
 
+// Close closes the database connection.
 func (s *SqliteConn) Close() {
 	s.db.Close()
 }
 
+// DeleteDb deletes the database files.
+// Only used for testing
 func DeleteDb() {
 	files := []string{"data.db", "data.db-shm", "data.db-wal"}
 
