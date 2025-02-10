@@ -6,6 +6,10 @@ This project is a single GO service that provides two REST APIs to scan a GitHub
 
 The service creates a sqlite3 database in the same directory as the executable which is responsible for storing the parsed data.
 
+The service implements 2 POST APIs
+- `/scan` - Responsible for scanning the provided files in the repo, parsing and storing them in the DB. Scan runs asynchronous. The API will succeed before the scan is complete. Subsequent calls to `/scan` when a scan is already running will fetch an error
+- `/query` - Fetches data based on filters. If no filters are passed, all data is returned.
+
 To fetch the data from Github, the service makes a simple GET request to `raw.githubusercontent.com`. If the request fails, the services tries again 2 more times without any interval between retries.
 
 The service is built using the following libraries in GO:
