@@ -9,8 +9,8 @@ The service creates a sqlite3 database in the same directory as the executable w
 To fetch the data from Github, the service makes a simple GET request to `raw.githubusercontent.com`. If the request fails, the services tries again 2 more times without any interval between retries.
 
 The service is built using the following libraries in GO:
-- [fasthttp](github.com/valyala/fasthttp)
-- [go-sqlite3](github.com/mattn/go-sqlite3)
+- [fasthttp](https://github.com/valyala/fasthttp)
+- [go-sqlite3](https://github.com/mattn/go-sqlite3)
 
 ## Requirements
 
